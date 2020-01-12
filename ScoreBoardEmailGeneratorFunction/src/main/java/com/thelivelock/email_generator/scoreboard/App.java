@@ -2,37 +2,101 @@ package com.thelivelock.email_generator.scoreboard;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.jknack.handlebars.Handlebars;
+import com.github.jknack.handlebars.Template;
+import com.github.jknack.handlebars.io.ClassPathTemplateLoader;
+import com.github.jknack.handlebars.io.TemplateLoader;
+import com.thelivelock.email_generator.scoreboard.model.Match;
+import com.thelivelock.email_generator.scoreboard.model.ScoreBoard;
+import com.thelivelock.email_generator.scoreboard.model.Team;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Handler for requests to Lambda function.
  */
 public class App implements RequestHandler<Object, Object> {
 
+    private static final String NoLogoTeam = "No Logo";
+
+    private static final Map<String, String> teamUrl = Map.ofEntries(
+            Map.entry("La Lakers", "https://www.nba.com/.element/img/1.0/teamsites/logos/teamlogos_500x500/lal.png"),
+            Map.entry("Golden State Warriors", "https://www.freepnglogos.com/uploads/warriors-png-logo/golden-state-warriors-png-logo-9.png"),
+            Map.entry(NoLogoTeam, "http://pngimages.net/sites/default/files/basketball-logo-png-image-80566.png")
+    );
+
     public Object handleRequest(final Object input, final Context context) {
+        ScoreBoard scoreBoard = getScoreBoardFromLambdaInput(input);
+        // todo check if scoreboard null
+        setTeamLogo(scoreBoard);
+        String html = convertToHtml(scoreBoard);
         Map<String, String> headers = new HashMap<>();
-        headers.put("Content-Type", "application/json");
-        headers.put("X-Custom-Header", "application/json");
+        headers.put("Content-Type", "text/html");
+        headers.put("X-Custom-Header", "text/html");
+        return new GatewayResponse(html, headers, 200);
+    }
+
+    private String convertToHtml(ScoreBoard scoreBoard) {
+        TemplateLoader loader = new ClassPathTemplateLoader("/", ".html");
+        Handlebars handlebars = new Handlebars(loader);
+        Template template = null;
+        String htmlScoreBoard = "";
         try {
-            final String pageContents = this.getPageContents("https://checkip.amazonaws.com");
-            String output = String.format("{ \"message\": \"hello world\", \"location\": \"%s\" }", pageContents);
-            return new GatewayResponse(output, headers, 200);
+            template = handlebars.compile("scoreboard");
+            htmlScoreBoard = template.apply(scoreBoard);
         } catch (IOException e) {
-            return new GatewayResponse("{}", headers, 500);
+            e.printStackTrace();
+        }
+        return htmlScoreBoard;
+    }
+
+    private void setTeamLogo(ScoreBoard scoreBoard) {
+        List<Match> matches = scoreBoard.getMatches();
+        matches.forEach(this::setTeamLogo);
+    }
+
+    private void setTeamLogo(Match match) {
+        Team home = match.getHome();
+        setTeamLogo(home);
+        Team away = match.getAway();
+        setTeamLogo(away);
+    }
+
+    private void setTeamLogo(Team team) {
+        if (teamUrl.containsKey(team.getName())) {
+            team.setLogoUrl(teamUrl.get(team.getName()));
+        }
+        else {
+            team.setLogoUrl(teamUrl.get(NoLogoTeam));
         }
     }
 
-    private String getPageContents(String address) throws IOException {
-        URL url = new URL(address);
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(url.openStream()))) {
-            return br.lines().collect(Collectors.joining(System.lineSeparator()));
+    private ScoreBoard getScoreBoardFromLambdaInput(Object lambdaInput) {
+        ScoreBoard scoreBoard = null;
+        if (!(lambdaInput instanceof LinkedHashMap)) {
+            return null;
         }
+
+        HashMap<String, String> lambdaMapInput = (LinkedHashMap<String, String>) lambdaInput;
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            if (lambdaMapInput.get("body") == null) {
+                return null;
+            }
+
+            String body = lambdaMapInput.get("body");
+            body = java.net.URLDecoder.decode(body, StandardCharsets.UTF_8.name());
+            scoreBoard = objectMapper.readValue(body, ScoreBoard.class);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return scoreBoard;
     }
 }
