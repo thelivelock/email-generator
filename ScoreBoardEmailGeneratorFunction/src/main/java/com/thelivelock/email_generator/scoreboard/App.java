@@ -83,7 +83,7 @@ public class App implements RequestHandler<Object, Object> {
             return null;
         }
 
-        LinkedHashMap<String, String> lambdaMapInput = (LinkedHashMap<String, String>) lambdaInput;
+        HashMap<String, String> lambdaMapInput = (LinkedHashMap<String, String>) lambdaInput;
         ObjectMapper objectMapper = new ObjectMapper();
         try {
             if (lambdaMapInput.get("body") == null) {
