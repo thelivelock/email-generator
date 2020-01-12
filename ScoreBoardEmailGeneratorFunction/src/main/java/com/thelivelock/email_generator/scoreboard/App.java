@@ -37,10 +37,9 @@ public class App implements RequestHandler<Object, Object> {
         setTeamLogo(scoreBoard);
         String html = convertToHtml(scoreBoard);
         Map<String, String> headers = new HashMap<>();
-        headers.put("Content-Type", "application/json");
-        headers.put("X-Custom-Header", "application/json");
-        String output = String.format("{ \"html\": \"%s\"}", html);
-        return new GatewayResponse(output, headers, 200);
+        headers.put("Content-Type", "text/html");
+        headers.put("X-Custom-Header", "text/html");
+        return new GatewayResponse(html, headers, 200);
     }
 
     private String convertToHtml(ScoreBoard scoreBoard) {
